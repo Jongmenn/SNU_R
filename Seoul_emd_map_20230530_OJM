@@ -1,0 +1,412 @@
+#------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------#
+pacman::p_load(sf,tidyverse,mapproj,ggplot2,sp,readxl,dplyr)
+setwd("C:\\Users\\kard1\\OneDrive\\바탕 화면\\대학원\\R\\EMD_202005")
+
+korea_emd<- st_read('EMD.shp')
+
+korea_emd<- st_read('EMD.shp',options = "ENCODING=euc-kr")
+korea_emd_shp <-  as(korea_emd, 'Spatial')
+
+map_korea_emd <- fortify(korea_emd_shp)
+
+#읍면동 지도 
+x11();ggplot()+geom_polygon(data=map_korea_emd,
+                            aes(x=long,y=lat,group=group),
+                            fill="white",
+                            col="black")+labs(x="",y="")+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+seoul_emd<-subset(korea_emd,substr(EMD_CD,1,2)=="11")
+seoul_emd_shp <-  as(seoul_emd, 'Spatial')
+
+map_seoul_emd <- fortify(seoul_emd_shp)
+
+x11();ggplot()+geom_polygon(data=map_seoul_emd,aes(x=long,y=lat,group=group),
+                            fill="white",
+                            col="black")+labs(x="",y="")+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+length(seoul_emd$EMD_CD)
+#-----------------------------------------------------------------------------#
+#-----------------------------------------------------------------------------#
+setwd("C:\\Users\\kard1\\OneDrive\\바탕 화면\\대학원\\R")
+exp<-read_excel("request_seoul_merged_수정(220519).xlsx",sheet=2)
+table(exp$year)
+
+exp_16_20<-subset(exp,year>=2016)
+table(exp_16_20$month)
+#구별현황 - 행정동 426개동,법정동 467개
+unique(exp_16_20$ADM_DR_CD) %>% length
+head(exp_16_20)
+str(exp_16_20)
+table(exp_16_20$ADM_DR_NM)
+
+#읍면동별 년월별 노출자료를 그룹별 평균 산출
+agg1<-aggregate(pm25~ADM_DR_CD,data=exp_16_20,mean)
+agg2<-aggregate(pm10~ADM_DR_CD,data=exp_16_20,mean)
+agg3<-aggregate(no2 ~ADM_DR_CD,data=exp_16_20,mean)
+agg4<-aggregate(co  ~ADM_DR_CD,data=exp_16_20,mean)
+agg5<-aggregate(o3  ~ADM_DR_CD,data=exp_16_20,mean)
+
+#연구기간(2016~2020년간) 읍면동 노출 자료 산출 
+avg_exp<-cbind(agg1,pm10=agg2$pm10,no2=agg3$no2,co=agg4$co,o3=agg5$o3)
+
+#다른 방법
+avg_exp<-exp_16_20 %>% group_by(ADM_DR_CD) %>% summarise(pm25=mean(pm25),
+                                                         pm10=mean(pm10),
+                                                         no2 =mean(no2),
+                                                         co  =mean(co),
+                                                         o3  =mean(o3))
+
+#지도 자료와 노출 자료 연계
+length(unique(map_seoul_emd2$EMD_CD))
+
+#서울시 읍면동 정리한 파일 불러오기
+seoul_emd_code<-read_excel("seoul_emd_230530.xlsx",sheet=3)
+
+seoul_emd_code2<-seoul_emd_code[,c(3,5)]
+names(avg_exp)[1]="EMD_CD_Haengjeong"
+
+#data merge
+head(seoul_emd_code2,1)
+head(avg_exp,1)
+avg_exp2<-merge(seoul_emd_code2,avg_exp,by="EMD_CD_Haengjeong",all.x=T)
+
+#읍면동(법정동동별 평균 산출
+avg_exp3<-avg_exp2 %>% group_by(EMD_CD) %>% summarise(pm25=mean(pm25),
+                                                      pm10=mean(pm10),
+                                                      no2 =mean(no2),
+                                                      co  =mean(co),
+                                                      o3  =mean(o3)) 
+
+seoul_id<-data.frame(id=as.character(1:nrow(seoul_emd)),
+                     EMD_ENG_NM=seoul_emd$EMD_ENG_NM,
+                     EMD_KOR_NM=seoul_emd$EMD_KOR_NM,
+                     EMD_CD=seoul_emd$EMD_CD)
+
+map_seoul_emd2<-map_seoul_emd %>% left_join(seoul_id,by="id")
+
+final_dat<-merge(map_seoul_emd2,avg_exp3,by="EMD_CD",all.x=T)
+#------------------------------------------------------------------------------#
+#PM2.5
+x11();ggplot()+geom_polygon(data=final_dat,
+                            aes(x=long,y=lat,group=group,fill=pm25),
+                            col="black")+labs(x="",y="")+
+  scale_fill_gradient(low="green",high="red",na.value="gray")+
+  labs(fill=expression(paste(PM[2.5]," (",mu,g/m^3,")")))+
+  theme_bw(base_size=15)+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "top",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#PM10
+x11();ggplot()+geom_polygon(data=final_dat,
+                            aes(x=long,y=lat,group=group,fill=pm10),
+                            col="black")+labs(x="",y="")+
+  scale_fill_gradient(low="green",high="red",na.value="gray")+
+  labs(fill=expression(paste(PM[10]," (",mu,g/m^3,")")))+
+  theme_bw(base_size=12)+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "top",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#NO2
+x11();ggplot()+geom_polygon(data=final_dat,
+                            aes(x=long,y=lat,group=group,fill=no2),
+                            col="black")+labs(x="",y="")+
+  scale_fill_gradient(low="green",high="red",na.value="gray")+
+  labs(fill=expression(paste(NO[2]," (",ppb,")")))+
+  theme_bw(base_size=15)+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "top",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#CO
+x11();ggplot()+geom_polygon(data=final_dat,
+                            aes(x=long,y=lat,group=group,fill=co*1000),
+                            col="black")+labs(x="",y="")+
+  scale_fill_gradient(low="green",high="red",na.value="gray")+
+  labs(fill=expression(paste(CO[]," (",ppb,")")))+
+  theme_bw(base_size=12)+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "top",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#O3
+x11();ggplot()+geom_polygon(data=final_dat,
+                            aes(x=long,y=lat,group=group,fill=o3),
+                            col="black")+labs(x="",y="")+
+  scale_fill_gradient(low="green",high="red",na.value="gray")+
+  labs(fill=expression(paste(O[3]," (",ppb,")")))+
+  theme_bw(base_size=13)+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "top",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+#------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------#
+#법정동 기준으로 나눌지? 행정동 기준으로 나눌지? => 행정동
+#행정동기준 분위수 하위 5백분위수, 상위 95백분위수
+pm25_low <-quantile(avg_exp$pm25,c(0.05,0.95))[1]
+pm25_high<-quantile(avg_exp$pm25,c(0.05,0.95))[2]
+
+pm10_low <-quantile(avg_exp$pm10,c(0.05,0.95))[1]
+pm10_high<-quantile(avg_exp$pm10,c(0.05,0.95))[2]
+
+no2_low <-quantile(avg_exp$no2,c(0.05,0.95))[1]
+no2_high<-quantile(avg_exp$no2,c(0.05,0.95))[2]
+
+co_low <-quantile(avg_exp$co,c(0.05,0.95))[1]
+co_high<-quantile(avg_exp$co,c(0.05,0.95))[2]
+
+o3_low <-quantile(avg_exp$o3,c(0.05,0.95))[1]
+o3_high<-quantile(avg_exp$o3,c(0.05,0.95))[2]
+
+#AP 노출 농도 상위 95백분위수, 하위 5백분위수 
+final_dat$PM25_low =ifelse(final_dat$pm25<pm25_low ,1,0)
+final_dat$PM25_high=ifelse(final_dat$pm25>pm25_high,1,0)
+final_dat$PM10_low =ifelse(final_dat$pm10<pm10_low ,1,0)
+final_dat$PM10_high=ifelse(final_dat$pm10>pm10_high,1,0)
+final_dat$NO2_low  =ifelse(final_dat$no2 <no2_low  ,1,0)
+final_dat$NO2_high =ifelse(final_dat$no2 >no2_high ,1,0)
+final_dat$CO_low   =ifelse(final_dat$co  <co_low   ,1,0)
+final_dat$CO_high  =ifelse(final_dat$co  >co_high  ,1,0)
+final_dat$O3_low   =ifelse(final_dat$o3  <o3_low   ,1,0)
+final_dat$O3_high  =ifelse(final_dat$o3  >o3_high  ,1,0)
+
+#그림 같이 그리기 위해서 
+final_dat$PM25_g=with(final_dat,ifelse(pm25<pm25_low,"5th percentile 미만",ifelse(pm25>pm25_high,"95th percentile 초과","5th-95th")))
+final_dat$PM10_g=with(final_dat,ifelse(pm10<pm10_low,"5th percentile 미만",ifelse(pm10>pm10_high,"95th percentile 초과","5th-95th")))
+final_dat$NO2_g =with(final_dat,ifelse(no2<no2_low  ,"5th percentile 미만",ifelse(no2 >no2_high,"95th percentile 초과","5th-95th")))
+final_dat$CO_g  =with(final_dat,ifelse(co <co_low   ,"5th percentile 미만",ifelse(co  >co_high,"95th percentile 초과","5th-95th")))
+final_dat$O3_g  =with(final_dat,ifelse(o3 <o3_low   ,"5th percentile 미만",ifelse(o3  >o3_high,"95th percentile 초과","5th-95th")))
+
+rbind(psych::describe(final_dat$pm25),
+      psych::describe(final_dat$pm10),
+      psych::describe(final_dat$no2),
+      psych::describe(final_dat$co*1000),
+      psych::describe(final_dat$o3))
+
+#------------------------------------------------------------------------------#
+#PM2.5 그룹별 
+x11();ggplot()+geom_polygon(data=final_dat,aes(x=long,y=lat,group=group,fill=PM25_g),
+                            col="black")+labs(x="",y="")+
+  # scale_fill_gradient(low="white",high="red",na.value="gray")+
+  # scale_fill_gradient2(low = "white", mid = "green", high = "red",)+
+  scale_fill_manual(values=c("white","darkgreen","red"))+
+  theme_bw(base_size=15)+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.title=element_blank(),
+        legend.position = "top",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#PM10 그룹별
+x11();ggplot()+geom_polygon(data=final_dat,aes(x=long,y=lat,group=group,fill=PM10_g),
+                            col="black")+labs(x="",y="")+
+  # scale_fill_gradient(low="white",high="red",na.value="gray")+
+  # scale_fill_gradient2(low = "white", mid = "green", high = "red",)+
+  scale_fill_manual(values=c("white","darkgreen","red"))+
+  theme_bw(base_size=15)+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.title=element_blank(),
+        legend.position = "top",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#NO2 그룹별
+x11();ggplot()+geom_polygon(data=final_dat,aes(x=long,y=lat,group=group,fill=NO2_g),
+                            col="black")+labs(x="",y="")+
+  # scale_fill_gradient(low="white",high="red",na.value="gray")+
+  # scale_fill_gradient2(low = "white", mid = "green", high = "red",)+
+  scale_fill_manual(values=c("white","darkgreen","red"))+
+  theme_bw(base_size=15)+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.title=element_blank(),
+        legend.position = "top",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#CO 그룹별
+x11();ggplot()+geom_polygon(data=final_dat,aes(x=long,y=lat,group=group,fill=CO_g),
+                            col="black")+labs(x="",y="")+
+  # scale_fill_gradient(low="white",high="red",na.value="gray")+
+  # scale_fill_gradient2(low = "white", mid = "green", high = "red",)+
+  scale_fill_manual(values=c("white","darkgreen","red"))+
+  theme_bw(base_size=15)+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.title=element_blank(),
+        legend.position = "top",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#O3 그룹별
+x11();ggplot()+geom_polygon(data=final_dat,aes(x=long,y=lat,group=group,fill=O3_g),
+                            col="black")+labs(x="",y="")+
+  # scale_fill_gradient(low="white",high="red",na.value="gray")+
+  # scale_fill_gradient2(low = "white", mid = "green", high = "red",)+
+  scale_fill_manual(values=c("white","darkgreen","red"))+
+  theme_bw(base_size=15)+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.title=element_blank(),
+        legend.position = "top",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+#------------------------------------------------------------------------------#
+#양 극단 백분위수 초과 또는 미만 동네 
+uniq11<-unique(subset(final_dat,PM25_high==1)$EMD_KOR_NM)
+uniq12<-unique(subset(final_dat,PM25_low==1)$EMD_KOR_NM)
+uniq21<-unique(subset(final_dat,PM10_high==1)$EMD_KOR_NM)
+uniq22<-unique(subset(final_dat,PM10_low==1)$EMD_KOR_NM)
+uniq31<-unique(subset(final_dat,NO2_high==1)$EMD_KOR_NM)
+uniq32<-unique(subset(final_dat,NO2_low==1)$EMD_KOR_NM)
+uniq41<-unique(subset(final_dat,CO_high==1)$EMD_KOR_NM)
+uniq42<-unique(subset(final_dat,CO_low==1)$EMD_KOR_NM)
+uniq51<-unique(subset(final_dat,O3_high==1)$EMD_KOR_NM)
+uniq52<-unique(subset(final_dat,O3_low==1)$EMD_KOR_NM)
+
+d_uniq11<-subset(seoul_emd_code,EMD_KOR_NM %in% uniq11)
+d_uniq12<-subset(seoul_emd_code,EMD_KOR_NM %in% uniq12)
+d_uniq21<-subset(seoul_emd_code,EMD_KOR_NM %in% uniq21)
+d_uniq22<-subset(seoul_emd_code,EMD_KOR_NM %in% uniq22)
+d_uniq31<-subset(seoul_emd_code,EMD_KOR_NM %in% uniq31)
+d_uniq32<-subset(seoul_emd_code,EMD_KOR_NM %in% uniq32)
+d_uniq41<-subset(seoul_emd_code,EMD_KOR_NM %in% uniq41)
+d_uniq42<-subset(seoul_emd_code,EMD_KOR_NM %in% uniq42)
+d_uniq51<-subset(seoul_emd_code,EMD_KOR_NM %in% uniq51)
+d_uniq52<-subset(seoul_emd_code,EMD_KOR_NM %in% uniq52)
+
+#법정동에서 추리고, 다시 행정동 해당 추리기
+dd_uniq11<-data.frame(EMD_CD_Haengjeong=d_uniq11[!duplicated(d_uniq11$EMD_CD_Haengjeong),]$EMD_CD_Haengjeong)
+dd_uniq12<-data.frame(EMD_CD_Haengjeong=d_uniq12[!duplicated(d_uniq12$EMD_CD_Haengjeong),]$EMD_CD_Haengjeong)
+dd_uniq21<-data.frame(EMD_CD_Haengjeong=d_uniq21[!duplicated(d_uniq21$EMD_CD_Haengjeong),]$EMD_CD_Haengjeong)
+dd_uniq22<-data.frame(EMD_CD_Haengjeong=d_uniq22[!duplicated(d_uniq22$EMD_CD_Haengjeong),]$EMD_CD_Haengjeong)
+dd_uniq31<-data.frame(EMD_CD_Haengjeong=d_uniq31[!duplicated(d_uniq31$EMD_CD_Haengjeong),]$EMD_CD_Haengjeong)
+dd_uniq32<-data.frame(EMD_CD_Haengjeong=d_uniq32[!duplicated(d_uniq32$EMD_CD_Haengjeong),]$EMD_CD_Haengjeong)
+dd_uniq41<-data.frame(EMD_CD_Haengjeong=d_uniq41[!duplicated(d_uniq41$EMD_CD_Haengjeong),]$EMD_CD_Haengjeong)
+dd_uniq42<-data.frame(EMD_CD_Haengjeong=d_uniq42[!duplicated(d_uniq42$EMD_CD_Haengjeong),]$EMD_CD_Haengjeong)
+dd_uniq51<-data.frame(EMD_CD_Haengjeong=d_uniq51[!duplicated(d_uniq51$EMD_CD_Haengjeong),]$EMD_CD_Haengjeong)
+dd_uniq52<-data.frame(EMD_CD_Haengjeong=d_uniq52[!duplicated(d_uniq52$EMD_CD_Haengjeong),]$EMD_CD_Haengjeong)
+
+dd_uniq11$PM25_high=1
+dd_uniq12$PM25_low =1
+dd_uniq21$PM10_high=1
+dd_uniq22$PM10_low =1
+dd_uniq31$CO_high=1
+dd_uniq32$CO_low =1
+dd_uniq41$NO2_high=1
+dd_uniq42$NO2_low =1
+dd_uniq51$O3_high=1
+dd_uniq52$O3_low =1
+View(seoul_emd_code)
+
+
+z<-seoul_emd_code[,c(1,4,5)]
+unique(z$EMD_CD_Haengjeong)
+zz<-z[!duplicated(z$EMD_CD_Haengjeong),]
+
+head(zz)
+str(dd_uniq11)
+
+zzz<-zz %>% 
+  left_join(dd_uniq11,by="EMD_CD_Haengjeong") %>% 
+  left_join(dd_uniq12,by="EMD_CD_Haengjeong") %>% 
+  left_join(dd_uniq21,by="EMD_CD_Haengjeong") %>% 
+  left_join(dd_uniq22,by="EMD_CD_Haengjeong") %>% 
+  left_join(dd_uniq31,by="EMD_CD_Haengjeong") %>% 
+  left_join(dd_uniq32,by="EMD_CD_Haengjeong") %>% 
+  left_join(dd_uniq41,by="EMD_CD_Haengjeong") %>% 
+  left_join(dd_uniq42,by="EMD_CD_Haengjeong") %>% 
+  left_join(dd_uniq51,by="EMD_CD_Haengjeong") %>% 
+  left_join(dd_uniq52,by="EMD_CD_Haengjeong")
+
+write.csv(zzz,file="zzz.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+#------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------#
+
+x11();ggplot()+geom_polygon(data=final_dat,aes(x=long,y=lat,group=group,fill=PM25_high),
+                            col="black")+labs(x="",y="")+
+  scale_fill_gradient(low="white",high="red",na.value="gray")+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position ="none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+head(final_dat)
+table(final_dat$PM25_high+final_dat$PM25_low)
+x11();ggplot()+geom_polygon(data=final_dat,aes(x=long,y=lat,group=group,fill=PM25_low),
+                            col="black")+labs(x="",y="")+
+  scale_fill_gradient(low="white",high="darkgreen",na.value="gray")+
+  theme(axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position ="none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+#-----------------------------------------------------------------------------#
