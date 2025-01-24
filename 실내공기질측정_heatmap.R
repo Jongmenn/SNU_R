@@ -1,0 +1,91 @@
+
+#R 라이브러리 
+library(readxl) #엑셀파일 읽을 수 있는 패키지
+library(reshape2)
+library(ggplot2)
+
+#자료 디렉터리 설정
+setwd("D:\\SNU\\연구\\서울대환경보건센터\\실내공기질측정_44가구")
+
+#자료 불러오기
+d1_pm10<-read_excel("목동힐스테이트경로당_미세먼지_일평균_1022-1218.xlsx",sheet="목동힐스테이트경로당 PM10-일평균")
+d1_pm25<-read_excel("목동힐스테이트경로당_미세먼지_일평균_1022-1218.xlsx",sheet="목동힐스테이트경로당 PM2.5-일평균")
+
+#백석, 새말, 신원 경로당 입력된 엑셀 자료는 세번째 행부터 자료 입력
+d2_pm10<-read_excel("백석경로당_미세먼지_일평균_1022-1218.xlsx",sheet="백석경로당 PM10-일평균" ,skip=2)
+d2_pm25<-read_excel("백석경로당_미세먼지_일평균_1022-1218.xlsx",sheet="백석경로당 PM2.5-일평균",skip=2)
+
+d3_pm10<-read_excel("새말경로당_미세먼지_일평균_1022-1218.xlsx",sheet="새말경로당 PM10-일평균" ,skip=2)
+d3_pm25<-read_excel("새말경로당_미세먼지_일평균_1022-1218.xlsx",sheet="새말경로당 PM2.5-일평균",skip=2)
+
+d4_pm10<-read_excel("신원경로당_미세먼지_일평균_1022-1218.xlsx",sheet="신원경로당 PM10-일평균" ,skip=2)
+d4_pm25<-read_excel("신원경로당_미세먼지_일평균_1022-1218.xlsx",sheet="신원경로당 PM2.5-일평균",skip=2)
+
+#측정 대상 한글 이름제거
+n1_pm10<-names(d1_pm10)[3:length(d1_pm10)];n1_pm10=trimws(gsub("[가-힣]+", "", n1_pm10))
+n1_pm25<-names(d1_pm25)[3:length(d1_pm25)];n1_pm25=trimws(gsub("[가-힣]+", "", n1_pm25))
+n2_pm10<-names(d2_pm10)[3:length(d2_pm10)];n2_pm10=trimws(gsub("[가-힣]+", "", n2_pm10))
+n2_pm25<-names(d2_pm25)[3:length(d2_pm25)];n2_pm25=trimws(gsub("[가-힣]+", "", n2_pm25))
+n3_pm10<-names(d3_pm10)[3:length(d3_pm10)];n3_pm10=trimws(gsub("[가-힣]+", "", n3_pm10))
+n3_pm25<-names(d3_pm25)[3:length(d3_pm25)];n3_pm25=trimws(gsub("[가-힣]+", "", n3_pm25))
+n4_pm10<-names(d4_pm10)[3:length(d4_pm10)];n4_pm10=trimws(gsub("[가-힣]+", "", n4_pm10))
+n4_pm25<-names(d4_pm25)[3:length(d4_pm25)];n4_pm25=trimws(gsub("[가-힣]+", "", n4_pm25))
+
+names(d1_pm10)[c(1,3:length(d1_pm10))]=c("date",n1_pm10)
+names(d1_pm25)[c(1,3:length(d1_pm25))]=c("date",n1_pm25)
+
+names(d2_pm10)[c(1,3:length(d2_pm10))]=c("date",n2_pm10)
+names(d2_pm25)[c(1,3:length(d2_pm25))]=c("date",n2_pm25)
+
+names(d3_pm10)[c(1,3:length(d3_pm10))]=c("date",n3_pm10)
+names(d3_pm25)[c(1,3:length(d3_pm25))]=c("date",n3_pm25)
+
+names(d4_pm10)[c(1,3:length(d4_pm10))]=c("date",n4_pm10)
+names(d4_pm25)[c(1,3:length(d4_pm25))]=c("date",n4_pm25)
+
+#long form 형태로 변환 후 PM10 merge (행으로 쌓기)
+pm10_m<-rbind(melt(d1_pm10,id.vars =c("date")),
+              melt(d2_pm10,id.vars =c("date")),
+              melt(d3_pm10,id.vars =c("date")),
+              melt(d4_pm10,id.vars =c("date")))
+
+#long form 형태로 변환 후 PM2.5 merge (행으로 쌓기)
+pm25_m<-rbind(melt(d1_pm25,id.vars =c("date")),
+              melt(d2_pm25,id.vars =c("date")),
+              melt(d3_pm25,id.vars =c("date")),
+              melt(d4_pm25,id.vars =c("date")))
+
+summary(pm10_m$date)
+summary(pm25_m$date)
+
+pm10_m$date=as.Date(pm10_m$date)
+pm25_m$date=as.Date(pm25_m$date)
+
+#그림 그릴떄 범주 순서 변경
+pm10_m$variable_rev=factor(pm10_m$variable,levels=rev(levels(pm10_m$variable)))
+pm25_m$variable_rev=factor(pm25_m$variable,levels=rev(levels(pm25_m$variable)))
+
+x11();ggplot(pm10_m,aes(date,y=variable_rev,fill=value))+geom_tile(color = "white")+
+  scale_fill_gradient(low="white",high="darkgreen")+labs(x="Date",y="",
+                                                         fill=expression("PM"[10]*" (μg/m"^"3"~")"))+
+  scale_x_date(date_breaks = "1 day")+
+  theme_minimal(base_size=20)+
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    panel.grid = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+ggsave("heatmap_PM10.png",, width = 20, height = 10, dpi = 300) # PNG로 저장
+
+x11();ggplot(pm25_m,aes(date,y=variable_rev,fill=value))+geom_tile(color = "white")+
+  scale_fill_gradient(low="white",high="darkgreen")+labs(x="Date",y="",
+                                                         fill=expression("PM"[2.5]*" (μg/m"^"3"~")"))+
+  scale_x_date(date_breaks = "1 day")+
+  theme_minimal(base_size=20)+
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    panel.grid = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+ggsave("heatmap_PM2.5.png",, width = 20, height = 10, dpi = 300) # PNG로 저장
